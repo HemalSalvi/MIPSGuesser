@@ -1,0 +1,278 @@
+#cards must be generated in program
+#program can repeat
+#cards displayed in random order
+#minimum player input
+	
+	.data
+one:	.space 128 #make arrays to hold the 32 integers stored on their respective card. A card contains a number when it's respective binary digit is a 1 for that number.
+two:	.space 128 #For example, 29 = 011101 so 29 would be stored in sixteen, eight, four, and one.	
+four:	.space 128
+eight:	.space 128
+sixteen:.space 128
+thrtwo:	.space 128
+space:	.asciiz " "
+rand:	.word 1, 2, 3, 4, 5, 6 #used to determine which array card to generate
+mess:	.asciiz "\nIs the number you're thinking of in this card? If it is in the card, type 1. If it is not in the card, type 0. "
+total:	.word 0
+endm:	.asciiz "\nThe number you're thinking of is " 
+per:	.asciiz " ."
+error:	.asciiz "\nYour input was a number that was not 0 or 1. "
+newg:	.asciiz "\nWould you like to play again? If you do, type 1. If you don't, type 0. "
+	.text
+	
+main:	sw $zero, total #set total to 0 (used when restarting the game)
+	la $s1, one #load the address of the arrays into their respective 2^n register s(n+1). Use these to traverse the arrays
+	la $s2, two
+	la $s3, four
+	la $s4, eight
+	la $s5, sixteen
+	la $s6, thrtwo
+	
+store:	add $t0, $t0, $zero #set t0 to 0, since t0 will be the counting variable
+	addi $t1, $t0, 0 #set t1 to t0 since we need to be able to subtract and retain the original number at the same time
+	
+sto32:	blt $t1, 32, sto16 #if t2 is less than 32, go to the 16 check
+	subi $t1, $t1, 32 #subtract 32 from t2 and mark the number as a 32
+	sw $t0, ($s6) #store t0 into the 32-array
+	addi $s6, $s6, 4 #go to the next spot in the 32-bit array
+	
+sto16: 	blt $t1, 16, sto8 #not going to repeat comments, just assume the same as "sto32" with all 32 replaced by 16
+	subi $t1, $t1, 16 
+	sw $t0, ($s5)
+	addi $s5, $s5, 4
+	
+sto8:	blt $t1, 8, sto4
+	subi $t1, $t1, 8
+	sw $t0, ($s4)
+	addi $s4, $s4, 4
+	
+sto4:	blt $t1, 4, sto2
+	subi $t1, $t1, 4
+	sw $t0, ($s3)
+	addi $s3, $s3, 4
+	
+sto2:	blt $t1, 2, sto1
+	subi $t1, $t1, 2
+	sw $t0, ($s2)
+	addi $s2, $s2, 4
+	
+sto1:	blt $t1, 1, stoL
+	subi $t1, $t1, 1
+	sw $t0, ($s1)
+	addi $s1, $s1, 4
+	
+stoL: 	addi $t0, $t0, 1 #increment t0
+	addi $t1, $t0, 0 #set t1 to the new t0
+	beq $t0, 64, ds #if t0 is now 64, move on (the cards are fully generated)
+	j sto32 #otherwise, repeat the loop
+	
+ds:	la $t2, rand	#ds stands for Durstenfeld's Shuffle, basically being used to put the array with values 1 to 6 in random order. Start by loading the array in.
+	addi $t3, $zero, 5 #set t3 to 5, the initial max of the array swaps
+	j dsl #jump to dsl, which is where looping is done
+	
+dsl:	li $v0, 42 #prepare to print a random number
+	add $a1, $zero, $t3 #set the max to t3
+	syscall #now a0 is the random int
+	sll $a0, $a0, 2 #multiply a0 by 4
+	sll $t4, $t3, 2 #set t4 to t3 times 4
+	add $t5, $t2, $a0 #set t5 to address of the random location
+	add $t6, $t2, $t4 #set t6 to address of the max location
+	lw $t7, ($t5) #set t7 to contents of random location
+	lw $t8, ($t6) #set t8 to contents of max location
+	sw $t7, ($t6) #set contents of max location to the data at the random location
+	sw $t8, ($t5) #set contents of random location to the data at max location
+	subi $t3, $t3, 1 #lower t3 by 1
+	beq $t3, 0, sc #branch out if t3 hits 0 (meaning no more swaps possible at next iteration)
+	j dsl #repeat loop otherwise
+	
+sc:	#sc is short for select cards, it's the loop that selects which card to display and displays the cards
+	li $t9, 0 #set t9 to 0, increments every time loop is called
+	la $t8, rand #set t8 to the location of the rand location
+	subi $t8, $t8, 4 #decrease t8 by 4 to compensate for the immediate increase by 4 at the start of the loop
+	j scl #jump to the loop
+	
+scl:	addi $t9, $t9, 1 #increase t9 by 1
+	bgt $t9, 6, end #if the counter is over 6 branch out
+	addi $t8, $t8, 4
+	lw $t7, ($t8)
+	beq $t7, 1, c1 #if its one of these numbers, branch out
+	beq $t7, 2, c2
+	beq $t7, 3, c4
+	beq $t7, 4, c8
+	beq $t7, 5, c16
+	beq $t7, 6, c32
+	j end #in case there's an error with the value of t7, end the program
+	
+c1:	la $s0, one #get the address of the card
+	li $t0, 0 #set counter to 0
+	jal disc #jump to the display card function
+	la $a0, mess
+	li $v0, 4
+	syscall
+	la $v0, 5
+	syscall
+	bgt $v0, 1, err #go to the error if the input is greater than 1
+	blt $v0, 0, err #go to the error if the input is less than 0
+	mul $t0, $v0, 1 #if input 1, set t0 to 1. if input 0, set t0 to 0.
+	lw $t1, total #set t1 to total
+	add $t1, $t1, $t0 #add this sum to total
+	sw $t1, total #store the new total back
+	j scl
+	
+c2:	la $s0, two #get the address of the card
+	li $t0, 0 #set counter to 0
+	jal disc #jump to the display card function
+	la $a0, mess
+	li $v0, 4
+	syscall
+	la $v0, 5
+	syscall
+	bgt $v0, 1, err #go to the error if the input is greater than 1
+	blt $v0, 0, err #go to the error if the input is less than 0
+	mul $t0, $v0, 2 #if input 1, set t0 to 2. if input 0, set t0 to 0.
+	lw $t1, total #set t1 to total
+	add $t1, $t1, $t0 #add this sum to total
+	sw $t1, total #store the new total back
+	j scl
+
+c4:	la $s0, four #get the address of the card
+	li $t0, 0 #set counter to 0
+	jal disc #jump to the display card function
+	la $a0, mess
+	li $v0, 4
+	syscall
+	la $v0, 5
+	syscall
+	bgt $v0, 1, err #go to the error if the input is greater than 1
+	blt $v0, 0, err #go to the error if the input is less than 0
+	mul $t0, $v0, 4 #if input 1, set t0 to 4. if input 0, set t0 to 0.
+	lw $t1, total #set t1 to total
+	add $t1, $t1, $t0 #add this sum to total
+	sw $t1, total #store the new total back
+	j scl
+
+c8:	la $s0, eight #get the address of the card
+	li $t0, 0 #set counter to 0
+	jal disc #jump to the display card function
+	la $a0, mess
+	li $v0, 4
+	syscall
+	la $v0, 5
+	syscall
+	bgt $v0, 1, err #go to the error if the input is greater than 1
+	blt $v0, 0, err #go to the error if the input is less than 0
+	mul $t0, $v0, 8 #if input 1, set t0 to 8. if input 0, set t0 to 0.
+	lw $t1, total #set t1 to total
+	add $t1, $t1, $t0 #add this sum to total
+	sw $t1, total #store the new total back
+	j scl
+
+c16:	la $s0, sixteen #get the address of the card
+	li $t0, 0 #set counter to 0
+	jal disc #jump to the display card function
+	la $a0, mess
+	li $v0, 4
+	syscall
+	la $v0, 5
+	syscall
+	bgt $v0, 1, err #go to the error if the input is greater than 1
+	blt $v0, 0, err #go to the error if the input is less than 0
+	mul $t0, $v0, 16 #if input 1, set t0 to 16. if input 0, set t0 to 0.
+	lw $t1, total #set t1 to total
+	add $t1, $t1, $t0 #add this sum to total
+	sw $t1, total #store the new total back
+	j scl
+
+c32:	la $s0, thrtwo #get the address of the card
+	li $t0, 0 #set counter to 0
+	jal disc #jump to the display card function
+	la $a0, mess
+	li $v0, 4
+	syscall
+	la $v0, 5
+	syscall
+	bgt $v0, 1, err #go to the error if the input is greater than 1
+	blt $v0, 0, err #go to the error if the input is less than 0
+	mul $t0, $v0, 32 #if input 1, set t0 to 32. if input 0, set t0 to 0.
+	lw $t1, total #set t1 to total
+	add $t1, $t1, $t0 #add this sum to total
+	sw $t1, total #store the new total back
+	j scl
+	
+disc:	#display card function. I'm leaving it pretty rough and ugly right now, can improve it later if needed
+	li $v0, 1
+	lw $a0, ($s0)
+	syscall
+	addi $s0, $s0, 4 #set s0 to next entry in array
+	addi $t0, $t0, 1 #increment t0
+	li $v0, 4
+	la $a0, space
+	syscall
+	blt $t0, 32, disc
+	jr $ra
+	
+err: 	li $v0, 4
+	la $a0, error
+	syscall
+	li $v0, 10
+	syscall
+	
+	
+	
+#test:	la $t2, rand #load t2 into rand
+#	li $t3, 0 #set t3 to 0
+
+#testl:	lw $a0, ($t2) #load t2 into a0
+#	li $v0, 1 #print int
+#	syscall
+#	addi $t3, $t3, 1 #increase t3 by 1 (used as a counter)
+#	addi $t2, $t2, 4
+#	beq $t3, 6, end
+#	j testl
+	
+	
+	
+	
+#test:	la $s1, thrtwo
+#	addi $t2, $zero, 0
+	
+#testL:	li $v0, 1
+#	lw $a0, ($s1)
+#	syscall
+#	addi $s1, $s1, 4
+#	addi $t2, $t2, 1
+#	li $v0, 4
+#	la $a0, space
+#	syscall
+#	blt $t2, 32, testL
+#	j end
+	
+	
+end:	li $v0, 4
+	la $a0, endm
+	syscall
+	li $v0, 1
+	lw $a0, total
+	syscall
+	li $v0, 4
+	la $a0, per
+	syscall
+	
+	li $v0, 4
+	la $a0, newg
+	syscall
+	
+	li $v0, 5
+	syscall
+	bgt $v0, 1, err #go to the error if the input is greater than 1
+	blt $v0, 0, err #go to the error if the input is less than 0
+	beq $v0, 1, main
+	beq $v0, 0, shutd
+	
+shutd:	li $v0, 10
+	syscall
+	
+	
+	
+	
+	
